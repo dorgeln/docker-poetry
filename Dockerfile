@@ -1,10 +1,8 @@
 ARG PYTHON_VERSION=3.8.8
 ARG POETRY_VERSION=1.1.4
 
-# `python-base` sets up all our shared environment variables
 FROM python:${PYTHON_VERSION}-slim as python-base
 
-# python
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=off \
@@ -17,7 +15,6 @@ ENV PYTHONUNBUFFERED=1 \
     PYSETUP_PATH="/opt/pysetup" \
     VENV_PATH="/opt/pysetup/.venv"
 
-# prepend poetry and venv to path
 ENV PATH="$POETRY_HOME/bin:$VENV_PATH/bin:$PATH"
 
 RUN apt-get update \
@@ -28,6 +25,30 @@ RUN curl -sSL https://raw.githubusercontent.com/sdispater/poetry/master/get-poet
 
 WORKDIR $PYSETUP_PATH
 COPY poetry.lock pyproject.toml ./
-
-# install runtime deps - uses $POETRY_VIRTUALENVS_IN_PROJECT internally
 RUN poetry install --no-dev -vvv
+
+FROM python-base as development
+
+ARG NB_USER=auser 
+ARG NB_UID=1000
+
+ENV USER ${NB_USER}
+ENV HOME /home/${NB_USER}
+
+RUN adduser --disabled-password \
+    --gecos "Default user" \
+    --uid ${NB_UID} \
+    ${NB_USER}
+
+
+WORKDIR $PYSETUP_PATH
+COPY --from=python-base $POETRY_HOME $POETRY_HOME
+COPY --from=python-base $PYSETUP_PATH $PYSETUP_PATH
+RUN poetry install -vvv
+
+USER $NB_UID
+ENV XDG_CACHE_HOME="/home/${NB_USER}/.cache/"
+# RUN MPLBACKEND=Agg python -c "import matplotlib.pyplot"
+
+WORKDIR ${HOME}
+USER ${USER} 
